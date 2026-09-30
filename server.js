@@ -58,7 +58,7 @@ const parsePay=value=>{
  return Number(value.trim().replace(/\./g,''));
 };
 const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
-const cleanUser=u=>u?({id:u.id,name:u.name,email:u.email,role:u.role,email_verified:!!u.email_verified_at,email_change:authVerification.emailChange(u),bio:u.bio,phone:u.phone,phone_verification:features.phone.pending(u.id,'profile',u.phone),...features.profile(u),company:u.role==='company'?getCompany(u.id):null}):null;
+const cleanAccount=u=>u?({id:u.id,name:u.name,email:u.email,role:u.role,email_verified:!!u.email_verified_at,email_change:authVerification.emailChange(u),bio:u.bio,phone:u.phone,phone_verification:features.phone.pending(u.id,'profile',u.phone),...features.profile(u),company:u.role==='company'?getCompany(u.id):null}):null;
 const hash=(pass,salt=crypto.randomBytes(16).toString('hex'))=>salt+':'+crypto.scryptSync(pass,salt,64).toString('hex');
 const verify=(pass,stored)=>{const check=hash(pass,stored.split(':')[0]);return crypto.timingSafeEqual(Buffer.from(check),Buffer.from(stored));};
 const limits=new Map();
@@ -81,7 +81,9 @@ async function handler(req,res){
  if(!['seeker','company'].includes(portal))return json(res,400,{error:'Portal tidak valid.'});
  const cookieName='workend_'+portal+'_session';
  const token=(req.headers.cookie||'').split(/;\s*/).find(x=>x.startsWith(cookieName+'='))?.split('=')[1];
- const user=token?db.prepare("SELECT users.* FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>? AND users.role=? AND (users.role<>'company' OR users.email_verified_at IS NOT NULL)").get(token,Date.now(),portal):null;
+ const accountSession=token?db.prepare("SELECT users.* FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>? AND sessions.portal=? AND (sessions.portal<>'company' OR users.email_verified_at IS NOT NULL)").get(token,Date.now(),portal):null;
+ const user=accountSession?{...accountSession,role:portal}:null;
+ const cleanUser=u=>u?cleanAccount({...u,role:portal}):null;
  const requireUser=role=>{if(!user)throw Object.assign(new Error('Silakan masuk terlebih dahulu.'),{status:401});if(role&&user.role!==role)throw Object.assign(new Error('Akses tidak diizinkan untuk peran ini.'),{status:403});};
  const requireCompany=()=>{requireUser('company');const company=getCompany(user.id);if(!company?.registration_complete)throw Object.assign(new Error('Daftarkan perusahaan terlebih dahulu sebelum memasang atau membuka lowongan.'),{status:403});return company;};
  const str=(key,min=1,max=5000)=>{if(typeof body[key]!=='string'||body[key].trim().length<min||body[key].trim().length>max)throw Object.assign(new Error(`Isian ${key} belum sesuai.`),{status:400});return body[key].trim();};
@@ -125,9 +127,8 @@ async function handler(req,res){
    if(db.prepare('SELECT id FROM users WHERE email=?').get(email))return json(res,409,{error:'Email sudah terdaftar. Silakan masuk.'});
    const id=crypto.randomUUID();db.prepare('INSERT INTO users(id,name,email,password,role) VALUES(?,?,?,?,?)').run(id,name,email,hash(password),role);account=db.prepare('SELECT * FROM users WHERE id=?').get(id);
   }else{account=db.prepare('SELECT * FROM users WHERE email=?').get(email);if(!account||!verify(password,account.password))return json(res,401,{error:'Email atau kata sandi tidak cocok.'});}
-  if(account.role!==portal)return json(res,403,{error:portal==='company'?'Akun ini adalah pencari kerja. Silakan masuk melalui halaman Workend pekerja.':'Akun ini adalah Employer. Silakan masuk melalui portal Employer di /employer.'});
-  if(account.role==='company'&&!account.email_verified_at)return json(res,200,await authVerification.begin(account,res));
-  const session=crypto.randomBytes(32).toString('hex');db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(session,account.id,Date.now()+7*86400000);
+  if(portal==='company'&&!account.email_verified_at)return json(res,200,await authVerification.begin(account,res));
+  const session=crypto.randomBytes(32).toString('hex');db.prepare('INSERT INTO sessions(token,user_id,expires,portal) VALUES(?,?,?,?)').run(session,account.id,Date.now()+7*86400000,portal);
   res.setHeader('Set-Cookie',`${cookieName}=${session}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${process.env.NODE_ENV==='production'?'; Secure':''}`);return json(res,200,{user:cleanUser(account)});
  }
  if(p==='/api/logout'&&method==='POST'){if(user)db.prepare('DELETE FROM sessions WHERE token=?').run(token);res.setHeader('Set-Cookie',`${cookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);return json(res,200,{ok:true});}
@@ -146,6 +147,7 @@ async function handler(req,res){
   const job=db.prepare('SELECT * FROM jobs WHERE id=? AND active=1 AND (owner IS NULL OR owner IN (SELECT owner FROM companies))').get(str('job_id'));
   if(!job)return json(res,404,{error:'Lowongan sudah tidak tersedia.'});
   if(!job.owner)return json(res,400,{error:'Ini lowongan demo. Lamaran tersedia untuk lowongan perusahaan terdaftar.'});
+  if(job.owner===user.id)return json(res,400,{error:'Kamu tidak dapat melamar lowongan perusahaanmu sendiri.'});
   const letter=body.letter==null?'':str('letter',0,4000);
   const portfolio=body.portfolio==null?'':str('portfolio',0,500);
   const file=body.cv_file;

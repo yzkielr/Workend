@@ -16,7 +16,11 @@ Buka portal yang sesuai:
 - Pencari kerja: http://localhost:3000/
 - Employer: http://localhost:3000/employer
 
-Keduanya memiliki halaman, navigasi, formulir daftar/masuk, dan cookie sesi berbeda. Peran akun ditentukan oleh portal, tanpa pilihan peran pada formulir. Satu browser dapat masuk sebagai pekerja dan Employer bersamaan, dan logout di satu portal tidak mengeluarkan akun dari portal lainnya. Link lama `/company` otomatis dialihkan ke `/employer`. Akun dan sesi portal perusahaan sebelumnya tetap berlaku.
+Keduanya memiliki halaman, navigasi, formulir daftar/masuk, dan cookie sesi berbeda. **Satu akun/email dan kata sandi dapat digunakan di kedua portal**, termasuk akun lama. Peran aktif mengikuti portal tempat masuk; tidak perlu mendaftar ulang. Portal Employer tetap memerlukan verifikasi email, termasuk untuk akun yang awalnya mendaftar sebagai pekerja. Satu browser dapat masuk sebagai pekerja dan Employer bersamaan, dan logout di satu portal tidak mengeluarkan akun dari portal lainnya. Setiap sesi dibatasi ke portalnya; mengganti nama cookie tidak memberikan akses ke portal lain. Link lama `/company` otomatis dialihkan ke `/employer`.
+
+Data akun pribadi (nama, email, telepon, dan profil) digunakan bersama. Data perusahaan, lowongan yang dipasang, serta lamaran sebagai pekerja tetap memiliki fungsi dan tampilan terpisah. Pengguna tidak dapat melamar lowongan perusahaannya sendiri. Pergantian email akun berlaku untuk kedua portal dan mencabut sesi lama.
+
+Profil pekerja menggunakan kartu ringkasan dan indikator kelengkapan, navigasi antarbagian, serta formulir informasi pribadi, deskripsi diri, pengalaman, minat, keahlian, dan sertifikat. Indikator dihitung dari data yang sudah disimpan; bagian tambahan tetap opsional. Isian yang diperlukan ditandai bintang merah dengan label aksesibel.
 
 Employer wajib mendaftarkan perusahaan sebelum menerbitkan atau membuka kembali lowongan. Data wajib: jenis usaha, nama perusahaan/usaha, bidang usaha, jumlah karyawan, kota, alamat kantor lengkap, email perusahaan, telepon, dan deskripsi; website dan logo opsional. Akun penanggung jawab dan profil perusahaan disimpan terpisah. Validasi diterapkan pada UI dan API. Pendaftaran data perusahaan ini bukan verifikasi legal atau persetujuan admin.
 

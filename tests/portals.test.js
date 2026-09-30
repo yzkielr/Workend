@@ -30,6 +30,13 @@ test('Radius filters onsite jobs by coordinates and excludes unlocated and remot
 test('Worker profile renders escaped experience, private photo and optional certificates',()=>{
  const c=portalContext('/');c.run("state.user={role:'seeker',name:'Candidate',email:'c@example.test',experience:'<script>alert(1)</script>',skills:'Latte art'}");const html=c.run('profilePage()');assert.match(html,/name="photo_file"/);assert.match(html,/name="certificates"/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
 });
+test('Worker profile groups editable sections and marks only required fields with an asterisk',()=>{
+ const c=portalContext('/');c.run("state.user={role:'seeker',name:'Candidate',email:'candidate@example.test'}");const html=c.run('profilePage()');
+ for(const id of ['identity','about','experience','interests','skills','certificates'])assert.match(html,new RegExp('id="profile-'+id+'"'));
+ assert.match(html,/Kelengkapan profil/);assert.match(html,/type="submit"/);
+ assert.match(c.run("field('name','Nama','text','','required')"),/aria-label="Wajib diisi">\*<\/span>/);
+ assert.doesNotMatch(c.run("field('headline','Judul profil')"),/required-label/);
+});
 test('Trust labels distinguish complete business data from unverified contact',()=>{
  const c=portalContext('/');const html=c.run('trustBadges({profile_complete:true,contact_verified:false})');assert.match(html,/Profil bisnis lengkap/);assert.match(html,/Kontak belum terverifikasi/);assert.doesNotMatch(html,/>Kontak terverifikasi</);
 });

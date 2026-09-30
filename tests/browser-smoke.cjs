@@ -65,7 +65,18 @@ async function run(){
  await until("!!document.querySelector('#profile-form')");
  await evaluate(`(()=>{const f=document.querySelector('#profile-form');f.elements.headline.value='Barista siap weekend';f.elements.experience.value='Cafe sebelumnya, 2024–2026';f.elements.skills.value='Latte art, kasir';f.elements.interests.value='F&B';f.elements.certificates.value='Pelatihan barista 2025';const dt=new DataTransfer();dt.items.add(new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jr1kAAAAASUVORK5CYII='),c=>c.charCodeAt(0))],'photo.png',{type:'image/png'}));f.elements.photo_file.files=dt.files;f.requestSubmit();})()`);
  await until("state.user.headline==='Barista siap weekend' && !!state.user.photo_url");
+ await until("document.querySelector('.profile-summary img.profile-avatar')?.naturalWidth>0");
  assert.equal(await evaluate("document.querySelector('.profile-avatar').complete && document.querySelector('.profile-avatar').naturalWidth>0"),true);
+ for(const [width,theme] of [[1366,'light'],[390,'dark'],[320,'light']]){
+  await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+  await evaluate(`document.documentElement.dataset.theme='${theme}';window.scrollTo(0,0)`);
+  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+  assert.equal(await evaluate("document.querySelector('label[for=f-name] .required-label').textContent"),'*');
+  const profileShot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync(path.resolve('artifacts',`profile-new-${width}-${theme}.png`),Buffer.from(profileShot.data,'base64'));
+ }
+ await evaluate("document.querySelector('[data-section=profile-experience]').click()");
+ assert.equal(await evaluate('document.activeElement.name'),'experience');
+ await send('Emulation.setDeviceMetricsOverride',{width:1366,height:900,deviceScaleFactor:1,mobile:false});
 
  await evaluate("document.querySelector('#profile-form [name=phone_country]').value='ID';document.querySelector('#profile-form [name=phone]').value='081234567890';document.querySelector('#profile-form').requestSubmit()");
  await until("state.user.phone==='+6281234567890'");
@@ -141,6 +152,15 @@ async function run(){
  await evaluate("document.documentElement.dataset.theme='light';document.querySelector('.phone-field').scrollIntoView({block:'center'})");
  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
  const companyPhoneScreenshot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync(path.resolve('artifacts','phone-business-mobile-light.png'),Buffer.from(companyPhoneScreenshot.data,'base64'));
+ const employerId=await evaluate('state.user.id');
+ await send('Page.navigate',{url:origin+'/'});await until("typeof state!=='undefined' && !!state.user");
+ await evaluate("post('/logout').then(()=>{state.user=null;auth('login');document.querySelector('#auth-form [name=email]').value='new-browser-employer@example.test';document.querySelector('#auth-form [name=password]').value='test-password-123';document.querySelector('#auth-form').requestSubmit()})");
+ await until("state.user?.email==='new-browser-employer@example.test' && state.user.role==='seeker' && !document.querySelector('#auth-form')");
+ assert.equal(await evaluate('state.user.id'),employerId);
+ assert.equal(await evaluate("post('/applications',{job_id:state.jobs.find(j=>j.owner===state.user.id).id,portfolio:'https://example.test/cv'}).then(()=>false).catch(e=>e.message.includes('sendiri'))"),true);
+ await evaluate("navigate('profile')");await until("!!document.querySelector('.worker-profile-layout')");
+ await send('Page.navigate',{url:origin+'/employer'});await until("typeof state!=='undefined' && state.user?.role==='company'");
+ assert.equal(await evaluate('state.user.id'),employerId);
  assert.deepEqual(errors,[]);
  console.log('Browser smoke passed: recurring job, profile/photo, geolocation/radius, link-only CV, report, Employer profile access; desktop/mobile light/dark have no horizontal overflow.');
 }

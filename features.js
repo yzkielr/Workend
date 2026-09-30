@@ -85,7 +85,7 @@ function createFeatures(db, options = {}) {
       // Images cannot send the custom portal header. Authorize either valid portal session.
       const tokens = (req.headers.cookie || '').split(/;\s*/).filter(c => /^workend_(seeker|company)_session=/.test(c)).map(c => c.split('=')[1]);
       const allowed = tokens.some(token => {
-        const viewer = db.prepare("SELECT user_id FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>? AND (users.role<>'company' OR users.email_verified_at IS NOT NULL)").get(token, Date.now());
+        const viewer = db.prepare("SELECT user_id FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>? AND (sessions.portal<>'company' OR users.email_verified_at IS NOT NULL)").get(token, Date.now());
         return viewer && (viewer.user_id === id || db.prepare('SELECT a.id FROM applications a JOIN jobs j ON a.job_id=j.id WHERE a.user_id=? AND j.owner=?').get(id, viewer.user_id));
       });
       if (!allowed) fail('Photo tidak dapat diakses.', 404);

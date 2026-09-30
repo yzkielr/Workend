@@ -5,6 +5,9 @@ const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 const cookie=(name,value,age)=>`${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}${process.env.NODE_ENV==='production'?'; Secure':''}`;
 
 function createAuthVerification(db,deliver=sendEmail){
+ if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='portal')){
+  db.exec("ALTER TABLE sessions ADD COLUMN portal TEXT NOT NULL DEFAULT 'seeker'; UPDATE sessions SET portal=COALESCE((SELECT role FROM users WHERE users.id=sessions.user_id),'seeker')");
+ }
  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='email_verified_at'))db.exec('ALTER TABLE users ADD COLUMN email_verified_at TEXT');
  db.exec(`CREATE TABLE IF NOT EXISTS pending_auth(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS account_codes(user_id TEXT PRIMARY KEY REFERENCES users(id),email TEXT NOT NULL,hash TEXT NOT NULL,nonce TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,sent INTEGER NOT NULL,delivered INTEGER NOT NULL DEFAULT 0);
@@ -17,7 +20,7 @@ function createAuthVerification(db,deliver=sendEmail){
  function pending(req){
   const value=(req.headers.cookie||'').split(/;\s*/).find(c=>c.startsWith('workend_company_pending='))?.split('=')[1];
   if(!value)return null;
-  return db.prepare("SELECT u.*,p.token AS pending_token FROM pending_auth p JOIN users u ON u.id=p.user_id WHERE p.token=? AND p.expires>? AND u.role='company' AND u.email_verified_at IS NULL").get(digest(value),Date.now());
+  return db.prepare("SELECT u.*,p.token AS pending_token FROM pending_auth p JOIN users u ON u.id=p.user_id WHERE p.token=? AND p.expires>? AND u.email_verified_at IS NULL").get(digest(value),Date.now());
  }
  function info(account){
   if(!account)return {};
@@ -93,7 +96,7 @@ function createAuthVerification(db,deliver=sendEmail){
     try{
      db.prepare('UPDATE users SET email=?,email_verified_at=? WHERE id=?').run(record.new_email,new Date().toISOString(),user.id);
      db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
-     db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(session,user.id,Date.now()+604800000);
+     db.prepare("INSERT INTO sessions(token,user_id,expires,portal) VALUES(?,?,?,'company')").run(session,user.id,Date.now()+604800000);
      db.prepare('DELETE FROM pending_auth WHERE user_id=?').run(user.id);
      db.prepare('DELETE FROM account_codes WHERE user_id=?').run(user.id);
      db.prepare('DELETE FROM email_changes WHERE user_id=?').run(user.id);
@@ -123,8 +126,8 @@ function createAuthVerification(db,deliver=sendEmail){
    db.exec('BEGIN');
    try{
     db.prepare('UPDATE users SET email_verified_at=? WHERE id=?').run(new Date().toISOString(),account.id);
-    db.prepare('DELETE FROM sessions WHERE user_id=?').run(account.id);
-    db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(session,account.id,Date.now()+604800000);
+    db.prepare("DELETE FROM sessions WHERE user_id=? AND portal='company'").run(account.id);
+    db.prepare("INSERT INTO sessions(token,user_id,expires,portal) VALUES(?,?,?,'company')").run(session,account.id,Date.now()+604800000);
     db.prepare('DELETE FROM pending_auth WHERE user_id=?').run(account.id);
     db.prepare('DELETE FROM account_codes WHERE user_id=?').run(account.id);
     db.exec('COMMIT');
